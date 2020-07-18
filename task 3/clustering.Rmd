@@ -1,0 +1,88 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Import required libraries
+```{r}
+library(cluster) 
+library(funtimes)
+library(clusterCrit)
+library(ggplot2)
+```
+
+```{r}
+set.seed(123)
+N_START = 30
+
+getDataSet <- function(name,scaled = FALSE){
+  df <- read.csv(
+    paste("csv/",name,".csv",sep=""),
+    header=TRUE)
+  if(scaled){
+    attrs  <- df[names(df) != 'Class']
+    target <- list(df['Class'])
+    df <- data.frame(scale(attrs))
+    df <- cbind(df,target)
+  }
+  return(df)
+}
+```
+
+Initialize dataset
+```{r}
+dataset <- getDataSet("wine",T)
+df <- dataset[,names(dataset)!="Class"]
+```
+
+```{r}
+plotMetrics <- function(){
+  k.values <- 2:15
+  metrics = data.frame()
+  
+  for(k in k.values){
+    kmean.res <- kmeans(df, k, nstart = N_START)
+    pam.res  <- pam(df, k)
+    
+    intC <- intCriteria(data.matrix(df),kmean.res$cluster,c("Davies_Bouldin","Dunn"))
+    extC <- extCriteria(dataset$Class,kmean.res$cluster,c("Rand"))
+    pur  <- purity(dataset$Class,kmean.res$cluster)
+    metrics = rbind(metrics,
+                    list(k=k,
+                         algorithm="k-means",
+                         dbi=intC$davies_bouldin,
+                         dunn=intC$dunn,
+                         rand=extC$rand,
+                         pur=pur$pur))
+    
+    intC <- intCriteria(data.matrix(df),pam.res$cluster,c("Davies_Bouldin","Dunn"))
+    extC <- extCriteria(dataset$Class,pam.res$cluster,c("Rand"))
+    pur  <- purity(dataset$Class,pam.res$cluster)
+    metrics = rbind(metrics,
+                        list(k=k,
+                             algorithm="PAM",
+                             dbi=intC$davies_bouldin,
+                             dunn=intC$dunn,
+                             rand=extC$rand,
+                             pur=pur$pur))
+  }
+  
+  n_classes = length(unique(dataset$Class))
+  classes_line = geom_vline(xintercept = n_classes, linetype="dashed")
+  
+  print(ggplot(metrics, aes(x=k,y=dbi, col=algorithm)) + geom_line() + classes_line)
+  print(ggplot(metrics, aes(x=k,y=rand, col=algorithm)) + geom_line()+ classes_line)
+  print(ggplot(metrics, aes(x=k,y=dunn, col=algorithm)) + geom_line() + classes_line)
+  print(ggplot(metrics, aes(x=k,y=pur, col=algorithm)) + geom_line() + classes_line)
+}
+plotMetrics()
+```
+
+
+```{r}
+kmean.res <- kmeans(df, 3, nstart = N_START)
+fviz_cluster(kmean.res, df, geom = "point")
+```
+
+
+

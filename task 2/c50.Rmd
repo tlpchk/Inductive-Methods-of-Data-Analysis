@@ -1,0 +1,173 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Install required packages
+```{r}
+install.packages('printr')
+install.packages('C50')
+install.packages('MLmetrics')
+install.packages("caret",dependencies = TRUE)
+```
+
+Import required libraries
+```{r}
+library(C50)
+library(mlbench)
+library(caret)
+library(MLmetrics)
+library(plyr)
+```
+
+Implement initializing and training functions
+```{r}
+TRAIN_SIZE = 0.8
+WINNOW = FALSE
+NO_GLOBAL_PRUNNING = FALSE
+CF = 0.25
+
+getDataSet <- function(name){
+  df <- read.csv(
+    paste("csv/",name,".csv",sep=""),
+    header=TRUE)
+  df$Class <- as.factor(df$Class)
+  return(df)
+}
+
+splitDataSet <- function(dataset, trainSize){
+  smp_size <- floor(trainSize * nrow(dataset))
+  train.indices <- sample(1:nrow(dataset), smp_size)
+  dataset.train <- dataset[train.indices, ]
+  dataset.test <- dataset[-train.indices, ]
+  return(list("train"=dataset.train, "test"=dataset.test))
+}
+
+trainModel <- function(dataset, trainSize = TRAIN_SIZE){
+  dataset <- splitDataSet(dataset, trainSize)
+  model <- C5.0(
+    Class ~ .,
+    data=dataset$train,
+    control=C5.0Control(
+      winnow = WINNOW,
+      noGlobalPruning = NO_GLOBAL_PRUNNING,
+      CF = CF)
+    )
+  return(model)
+}
+
+trainManyTimes <- function(d, trainSize=TRAIN_SIZE, n=30){
+  c50.accuracy = c()
+  c50.f1score  = c()
+  
+  for(i in 1:n){
+    dataset <- splitDataSet(d, trainSize)
+    model <- C5.0(
+      Class ~ .,
+      data=dataset$train,
+      control=C5.0Control(
+        winnow = WINNOW,
+        noGlobalPruning = NO_GLOBAL_PRUNNING,
+        CF = CF)
+      )
+    pred <- predict(model, newdata=dataset$test)
+    c50.accuracy <- c(c50.accuracy, Accuracy(dataset$test$Class, pred))
+    c50.f1score  <- c(c50.f1score , F1_Score(dataset$test$Class, pred))
+  }
+  print(sprintf("Accuracy: %.3f", mean(c50.accuracy)))
+  print(sprintf("F1 Score: %.3f", mean(c50.f1score)))
+}
+```
+
+Implement cross validation functions
+```{r}
+crossValidation <- function(dataset, k=5, n=10){
+  c50.accuracy <- c()
+  c50.f1score  <- c()
+  
+  for (it in 1:n){
+    folds <- split(dataset, cut(sample(1:nrow(dataset)),k))
+    for (i in 1:k) {
+      test <- ldply(folds[i], data.frame)[,-1]
+      train <- ldply(folds[-i], data.frame)[,-1]
+      tmp.model <- C5.0(
+        Class ~ .,
+        data=train,
+        control=C5.0Control(
+          winnow = WINNOW,
+          noGlobalPruning = NO_GLOBAL_PRUNNING,
+          CF = CF
+        )
+      )
+      tmp.predict <- predict(tmp.model, newdata=test)
+      c50.accuracy <- c(c50.accuracy, Accuracy(test$Class, tmp.predict))
+      c50.f1score  <- c(c50.f1score , F1_Score(test$Class, tmp.predict))
+    }
+  }
+  print(sprintf("Accuracy: %.3f", mean(c50.accuracy)))
+  print(sprintf("F1 Score: %.3f", mean(c50.f1score)))
+}
+
+
+stratifiedCrossValidation <- function(dataset, k=5, n=10){
+  f1ScoreMetric <- function(data,lev=NULL,model=NULL){
+    return(F1_Score(data$obs, data$pred))
+  }
+  
+  fitControl <- trainControl(
+    method = "repeatedcv",
+    #summaryFunction = f1ScoreMetric,
+    number = k,
+    repeats = n,
+    returnResamp="all")
+  
+  x <- dataset[,names(dataset) != "Class"]
+  y <- dataset$Class
+  
+  grid <- expand.grid( .winnow=WINNOW, .trials=c(1), .model="tree" )
+  
+  mdl<- train(x=x,y=y,tuneGrid=grid,trControl=fitControl,method="C5.0")
+  
+  mdl$results
+}
+```
+
+Initialize dataset
+```{r}
+dataset <- getDataSet("seeds")
+```
+
+See attributes distribution
+```{r}
+attributes = dataset[,names(dataset)!="Class"]
+par(mfrow=c(3,3))
+for(c in names(attributes)){
+  hist(dataset[,c],main=c,xlab="Value")
+}
+```
+
+Cross Validation Compare
+```{r}
+k <- 10
+n <- 10
+
+crossValidation(dataset, k, n)
+stratifiedCrossValidation(dataset, k, n)$Accuracy
+```
+
+
+Training Results
+```{r}
+trainManyTimes(dataset)
+```
+
+```{r}
+model <- trainModel(dataset)
+summary(model)
+plot(model)
+```
+
+
+
+
+

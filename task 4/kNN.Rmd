@@ -1,0 +1,79 @@
+---
+title: "kNN"
+output: html_notebook
+---
+
+```{r}
+library(philentropy)
+```
+
+
+```{r}
+standarize <- function(x){
+  return (x - mean(x)) / sd(x)
+}
+
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+getDataSet <- function(name,scale='norm'){
+  df <- read.csv(
+    paste("csv/",name,".csv",sep=""),
+    header=TRUE)
+  attrs  <- df[names(df) != 'Class']
+  target <- list(df['Class'])
+  
+  if(scale == 'norm'){
+    attrs <- apply(attrs,2,normalize)
+  }else if(scale == 'std'){
+    attrs <- apply(attrs,2,standarize)
+  }
+  
+  df <- data.frame(attrs)
+  df <- cbind(df,target)
+  
+  return(df)
+}
+
+knn <- function(train, test, k, method){
+  n.test <- nrow(test)
+  n.train <- nrow(train)
+  if (n.train + n.test <= k) stop("k can not be more than n-1")
+  
+  neigh <- matrix(0, nrow = n.test, ncol = k) 
+  ddist <- NULL
+  for(i in 1:n.test) {
+    for(j in 1:n.train) {
+      xmat <- rbind(test[i,], train[j,]) # current test and train rows
+      ddist[j] <- distance(as.data.frame(xmat), method)  # distance
+    }
+    neigh[i, ] <- sort(ddist)[1:k] 
+  }
+  return(neigh)
+}
+```
+
+Initialize dataset
+```{r}
+dataset <- getDataSet("wine",scale='std')
+dataset
+```
+
+
+```{r}
+train_size=0.8
+train_idx <- sample(1:nrow(dataset),size=nrow(dataset)*train_size,replace = FALSE) #random selection of 70% data.
+ 
+train <- dataset[train_idx,names(df) != 'Class']
+test <- dataset[-train_idx,names(df) != 'Class']
+
+train.labels <- dataset[train_idx,]$Class
+test.labels <- dataset[-train_idx,]$Class
+
+#knn5 <- knn(train = train, test = test, cl=train.labels, k=5)
+
+knn3 <-knn(train, test,3, method="euclidean")
+knn3
+
+```
